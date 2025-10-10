@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ja">
-<heSad>
+<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="/test/sw-test/manifest.json">
   <meta name="theme-color" content="#0070b3">
 
   <!-- iOS 用。iOS は manifest だけでは不足 -->
@@ -19,7 +19,7 @@
       navigator.serviceWorker.register('/test/sw-test/sw.js').then(function() { console.log('Service Worker Registered'); });
     }
   </script>
-</heSad>
+</head>
 <body>
   <h1>SE-TEST</h1>
   <hr>
