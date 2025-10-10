@@ -10,13 +10,13 @@
   <!-- iOS 用。iOS は manifest だけでは不足 -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <link rel="apple-touch-icon" href="/sw-test/img/ico/icon-192.png">
+  <link rel="apple-touch-icon" href="/test/sw-test/img/ico/icon-192.png">
 
   <title>Document</title>
 
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw-test/sw.js').then(function() { console.log('Service Worker Registered'); });
+      navigator.serviceWorker.register('/test/sw-test/sw.js').then(function() { console.log('Service Worker Registered'); });
     }
   </script>
 </heSad>
