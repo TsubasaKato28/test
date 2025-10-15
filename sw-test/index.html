@@ -43,64 +43,93 @@
 
 <script>
   (function () {
-    const KEY_DISMISSED = 'a2hs-dismissed';   // #js-closeA2hs 押下フラグ
-    const KEY_INSTALLED = 'pwa-installed';    // インストール済み（iOSはホーム起動でセット）
+    // ===== Cookie helpers =====
+    const ONE_YEAR = 60 * 60 * 24 * 365; // 1年（秒）
+    const setCookie = (name, value, maxAgeSec = ONE_YEAR) => {
+      document.cookie =
+        encodeURIComponent(name) + '=' + encodeURIComponent(value) +
+        '; max-age=' + maxAgeSec +
+        '; path=/' +
+        '; SameSite=Lax' +
+        (location.protocol === 'https:' ? '; Secure' : '');
+    };
+    const getCookie = (name) => {
+      const n = encodeURIComponent(name) + '=';
+      return document.cookie.split('; ').reduce((acc, c) => {
+        if (c.indexOf(n) === 0) return decodeURIComponent(c.substring(n.length));
+        return acc;
+      }, null);
+    };
+    const delCookie = (name) => setCookie(name, '', 0); // 即時削除
 
+    // ===== Keys =====
+    const KEY_DISMISSED = 'a2hs-dismissed'; // バナーを今後出さない
+    const KEY_INSTALLED = 'pwa-installed';  // インストール済み
+
+    // ===== Env =====
     const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
     const isStandalone = () =>
       window.matchMedia('(display-mode: standalone)').matches ||
-      window.navigator.standalone === true; // iOS
+      window.navigator.standalone === true; // iOS Safari
 
-    // ホームから起動されたら “インストール済み” とみなして記録
+    // スタンドアロン（ホームアイコン or インストールアプリ）で開いたら「今日から1年」に更新
     if (isStandalone()) {
-      localStorage.setItem(KEY_INSTALLED, 'yes');
+      setCookie(KEY_INSTALLED, 'yes', ONE_YEAR);
     }
 
+    // 任意：前面復帰時にも延長（スタンドアロンのみ）
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && isStandalone()) {
+        setCookie(KEY_INSTALLED, 'yes', ONE_YEAR);
+      }
+    });
+
+    // UI参照
     const banner   = document.getElementById('a2hs-banner');
     const iosHint  = document.getElementById('ios-a2hs-hint');
     const a2hsBtn  = document.getElementById('a2hs-btn');
     const closeBtn = document.getElementById('js-closeA2hs');
 
-    let deferredPrompt = null; // Android用
+    let deferredPrompt = null; // Android/Chrome 用
 
-    // 以後非表示の優先判定（どの環境でも最優先）
-    const isDismissed = () => localStorage.getItem(KEY_DISMISSED) === 'yes';
-    const hideAll = () => { if (banner) banner.style.display = 'none'; };
+    // 表示制御
+    const isDismissed = () => getCookie(KEY_DISMISSED) === 'yes';
+    const isInstalled = () => getCookie(KEY_INSTALLED) === 'yes';
+    const hideAll  = () => { if (banner) banner.style.display = 'none'; };
     const showBanner = () => { if (banner) banner.style.display = 'block'; };
 
-    // 以後表示しないボタン
+    // ×ボタン：今後非表示（Cookie保存・最長1年）
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
-        localStorage.setItem(KEY_DISMISSED, 'yes'); // ★ここで永続非表示
+        setCookie(KEY_DISMISSED, 'yes', ONE_YEAR);
         hideAll();
       });
     }
 
-    // 共通：インストール済みなら出さない
-    const installed = localStorage.getItem(KEY_INSTALLED) === 'yes';
-    if (installed) {
+    // 既にインストール済みなら非表示
+    if (isInstalled()) {
       hideAll();
       return;
     }
 
-    // iOS：Safari（や他ブラウザ）でのガイド表示
+    // iOS：Safari は手動ガイドのみ（beforeinstallprompt なし）
     if (isIOS() && !isStandalone() && !isDismissed()) {
       if (iosHint) iosHint.style.display = 'block';
       if (a2hsBtn) a2hsBtn.style.display = 'none';
       showBanner();
     }
 
-    // Android：beforeinstallprompt を捕まえて自前ボタンを表示
+    // Android/Chrome：インストール可能になったらイベントを捕捉
     window.addEventListener('beforeinstallprompt', (e) => {
-      if (isDismissed()) return; // 以後非表示なら無視
-      e.preventDefault();
-      deferredPrompt = e;
+      if (isDismissed()) return;
+      e.preventDefault();               // 自動UIを抑止
+      deferredPrompt = e;               // 後で使う
       if (a2hsBtn) a2hsBtn.style.display = 'inline-block';
       if (iosHint) iosHint.style.display = 'none';
       showBanner();
     });
 
-    // Android：自前ボタンでインストールプロンプト
+    // Android/Chrome：自前ボタンでインストールUI表示
     if (a2hsBtn) {
       a2hsBtn.addEventListener('click', async () => {
         if (!deferredPrompt) return;
@@ -111,14 +140,11 @@
       });
     }
 
-    // Android：インストール完了を検知（以後非表示）
+    // Android/デスクトップChrome：インストール完了時に Cookie 記録＆以後非表示
     window.addEventListener('appinstalled', () => {
-      localStorage.setItem(KEY_INSTALLED, 'yes');
+      setCookie(KEY_INSTALLED, 'yes', ONE_YEAR);
       hideAll();
     });
-
-    // 念のため：デスクトップで出したくない場合はここで判定して hide してOK
-    // if (!/Android|iPhone|iPad|iPod/.test(navigator.userAgent)) hideAll();
   })();
 </script>
 
