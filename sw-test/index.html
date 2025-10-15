@@ -25,71 +25,101 @@
   <hr>
   <br>
 
-  <button id="a2hs-btn" style="display:none;">ホーム画面に追加</button>
+  <div id="a2hs-banner" style="display:none; position:fixed; inset:auto 0 0 0; padding:12px; background:#fff; box-shadow:0 -4px 12px rgba(0,0,0,.15); z-index:2147483647;">
+    <!-- iOS向けメッセージ -->
+    <div id="ios-a2hs-hint" style="display:none;">
+      iPhoneでは、Safariでこのページを開き<br>
+      共有（⬆️）→「ホーム画面に追加」を選んでください。
+    </div>
 
-  <!-- iOS の手順ガイド（必要時のみ表示） -->
-  <div id="ios-a2hs-hint" style="display:none;">
-    iPhoneでは、Safariの共有ボタン（⬆️）→「ホーム画面に追加」でインストールできます。
+    <!-- Android向けボタン -->
+    <button id="a2hs-btn" style="display:none;">ホーム画面に追加</button>
+
+    <!-- 以後表示しない（どの環境でも有効） -->
+    <button id="js-closeA2hs" style="margin-left:8px;">二度と表示しない</button>
   </div>
+
 </body>
 
 <script>
-  const isStandalone = () =>
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true; // iOS
+  (function () {
+    const KEY_DISMISSED = 'a2hs-dismissed';   // #js-closeA2hs 押下フラグ
+    const KEY_INSTALLED = 'pwa-installed';    // インストール済み（iOSはホーム起動でセット）
 
-  const isIosSafari = () => {
-    const ua = window.navigator.userAgent;
-    const isIOS = /iPhone|iPad|iPod/.test(ua);
-    const isSafari = /^((?!crios|fxios|opios).)*safari/i.test(ua);
-    return isIOS && isSafari;
-  };
-</script>
-<script>
-  let deferredPrompt = null;
-  const a2hsBtn = document.getElementById('a2hs-btn');
-  const iosHint = document.getElementById('ios-a2hs-hint');
+    const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const isStandalone = () =>
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true; // iOS
 
-  // すでにインストール済みなら何も出さない
-  if (isStandalone()) {
-    // 例: 導線を全て非表示
-    if (a2hsBtn) a2hsBtn.style.display = 'none';
-    if (iosHint) iosHint.style.display = 'none';
-  } else {
-    // Android: beforeinstallprompt をキャプチャ
+    // ホームから起動されたら “インストール済み” とみなして記録
+    if (isStandalone()) {
+      localStorage.setItem(KEY_INSTALLED, 'yes');
+    }
+
+    const banner   = document.getElementById('a2hs-banner');
+    const iosHint  = document.getElementById('ios-a2hs-hint');
+    const a2hsBtn  = document.getElementById('a2hs-btn');
+    const closeBtn = document.getElementById('js-closeA2hs');
+
+    let deferredPrompt = null; // Android用
+
+    // 以後非表示の優先判定（どの環境でも最優先）
+    const isDismissed = () => localStorage.getItem(KEY_DISMISSED) === 'yes';
+    const hideAll = () => { if (banner) banner.style.display = 'none'; };
+    const showBanner = () => { if (banner) banner.style.display = 'block'; };
+
+    // 以後表示しないボタン
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        localStorage.setItem(KEY_DISMISSED, 'yes'); // ★ここで永続非表示
+        hideAll();
+      });
+    }
+
+    // 共通：インストール済みなら出さない
+    const installed = localStorage.getItem(KEY_INSTALLED) === 'yes';
+    if (installed) {
+      hideAll();
+      return;
+    }
+
+    // iOS：Safari（や他ブラウザ）でのガイド表示
+    if (isIOS() && !isStandalone() && !isDismissed()) {
+      if (iosHint) iosHint.style.display = 'block';
+      if (a2hsBtn) a2hsBtn.style.display = 'none';
+      showBanner();
+    }
+
+    // Android：beforeinstallprompt を捕まえて自前ボタンを表示
     window.addEventListener('beforeinstallprompt', (e) => {
-      // デフォルトのミニバーを抑制
+      if (isDismissed()) return; // 以後非表示なら無視
       e.preventDefault();
       deferredPrompt = e;
-      // 自前ボタンを表示
       if (a2hsBtn) a2hsBtn.style.display = 'inline-block';
+      if (iosHint) iosHint.style.display = 'none';
+      showBanner();
     });
 
-    // クリックでプロンプトを開く
+    // Android：自前ボタンでインストールプロンプト
     if (a2hsBtn) {
       a2hsBtn.addEventListener('click', async () => {
         if (!deferredPrompt) return;
         deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice; // 'accepted' / 'dismissed'
-        // 必要なら outcome を解析して UI 変更
+        await deferredPrompt.userChoice; // 'accepted' or 'dismissed'
         deferredPrompt = null;
-        a2hsBtn.style.display = 'none';
+        hideAll();
       });
     }
 
-    // iOS: 代替ガイドを表示
-    if (isIosSafari() && iosHint) {
-      iosHint.style.display = 'block';
-      if (a2hsBtn) a2hsBtn.style.display = 'none';
-    }
-
-    // インストール完了イベント（任意でトラッキング）
+    // Android：インストール完了を検知（以後非表示）
     window.addEventListener('appinstalled', () => {
-      if (a2hsBtn) a2hsBtn.style.display = 'none';
-      if (iosHint) iosHint.style.display = 'none';
-      console.log('PWA installed');
+      localStorage.setItem(KEY_INSTALLED, 'yes');
+      hideAll();
     });
-  }
+
+    // 念のため：デスクトップで出したくない場合はここで判定して hide してOK
+    // if (!/Android|iPhone|iPad|iPod/.test(navigator.userAgent)) hideAll();
+  })();
 </script>
 
 </html>
